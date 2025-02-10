@@ -13,30 +13,17 @@ from sched_setup import (
 CONSULTANT_MIN_HOURS = 2
 CONSULTANT_MAX_HOURS = 10
 
-BLOCK_LENGTH_MINIMUM = 2  # 1 hr = 2 blocks
-BLOCK_LENGTH_MAXIMUM = 10  # 5 hr = 10 blocks
+DAILY_MAX_BLOCKS = 10  # 5 hr = 10 blocks
 
+# TODO: refactor this into preference enum?
+PREFERENCE_COSTS = {
+    PREF_PREFERABLE: 0,
+    PREF_NEUTRAL: 1,
+    PREF_NOT_PREFERABLE: 4,
+    PREF_UNAVAILABLE: 100,
+}
 
-def _get_availability(
-    df: pd.DataFrame, consultant: str, time_slot: pd.Timestamp
-) -> int:
-    return df.loc[time_slot, consultant]  # type: ignore
-
-
-def _get_preference_cost(
-    df: pd.DataFrame, consultant: str, time_slot: pd.Timestamp
-) -> int:
-    status = _get_availability(df, consultant, time_slot)
-
-    # TODO: refactor to use enum
-    if status == PREF_PREFERABLE:
-        return 0
-    elif status == PREF_NEUTRAL:
-        return 1
-    elif status == PREF_NOT_PREFERABLE:
-        return 4
-    else:  # status == PREF_UNAVAILABLE
-        return 100
+SHIFT_CHANGE_PENALTY = 3
 
 
 def create_schedule(df: pd.DataFrame):
@@ -48,74 +35,63 @@ def create_schedule(df: pd.DataFrame):
     consultants = df.columns
     time_slots = df.index
 
-    # decision variables
-    x = LpVariable.dicts(
-        "shift",
-        ((c, t) for c in consultants for t in time_slots),
-        cat=LpBinary,
-    )
+    # precompute availability and days to reduce function calls
+    availability = {(c, t): df.loc[t, c] for c in consultants for t in time_slots}
 
-    # TODO: add shift change constraints
-    # y = LpVariable.dicts(
-    #     "shift_change",
-    #     ((c, t) for c in consultants for t in time_slots[:-1]),
-    #     cat=LpBinary,
-    # )
+    days = df.index.map(lambda t: t.date()).unique()
+    day_slots = {day: df.index[df.index.map(lambda t: t.date()) == day] for day in days}
+
+    # only create decision variables where consultants are available
+    x = {
+        (c, t): LpVariable(f"shift_{c}_{t}", cat=LpBinary)
+        for (c, t), avail in availability.items()
+        if avail != PREF_UNAVAILABLE
+    }
+
+    # reduce number of shift changes
+    # TODO: make this daily instead of across whole schedule
+    y = {
+        (c, t): LpVariable(f"shift_change_{c}_{t}", cat=LpBinary)
+        for (c, t) in x.keys()
+        if t != time_slots[-1]
+    }
 
     # objective function
     preference_cost = lpSum(
-        [
-            x[c, t] * _get_preference_cost(df, c, t)
-            for c in consultants
-            for t in time_slots
-        ]
+        x[c, t] * PREFERENCE_COSTS[availability[c, t]] for c, t in x.keys()
     )
 
-    prob += preference_cost  # TODO: + 100 * shift_changes
+    # constraints
+    # 0. penalize shift changes
+    for c in consultants:
+        for i in range(len(time_slots) - 1):
+            t, t_next = time_slots[i], time_slots[i + 1]
+            if (c, t) in x and (c, t_next) in x:
+                prob += y[c, t] >= x[c, t] - x[c, t_next]
+                prob += y[c, t] >= x[c, t_next] - x[c, t]
+
+    shift_changes = lpSum(y.values())
+
+    prob += preference_cost + SHIFT_CHANGE_PENALTY * shift_changes
 
     # constraints
     # 1. one consultant per time slot
     for t in time_slots:
-        prob += lpSum([x[c, t] for c in consultants]) == 1
+        prob += lpSum(x[c, t] for c in consultants if (c, t) in x) == 1
 
-    # 2. minimum/maximum hours per consultant
+    # 2. minimum/maximum weekly hours per consultant
     for c in consultants:
-        num_consultant_hours = lpSum([0.5 * x[c, t] for t in time_slots])
-        prob += num_consultant_hours >= CONSULTANT_MIN_HOURS
-        prob += num_consultant_hours <= CONSULTANT_MAX_HOURS
+        total_blocks = lpSum(x[c, t] for t in time_slots if (c, t) in x)
+        prob += total_blocks >= CONSULTANT_MIN_HOURS * 2  # convert hours to blocks
+        prob += total_blocks <= CONSULTANT_MAX_HOURS * 2  # convert hours to blocks
 
-    # 3. not available times
+    # 3. maximum 5 hours (10 blocks) per day per consultant
     for c in consultants:
-        for t in time_slots:
-            if _get_availability(df, c, t) == PREF_UNAVAILABLE:
-                prob += x[c, t] == 0
+        for day in days:
+            slots = day_slots[day]
+            prob += lpSum(x[c, t] for t in slots if (c, t) in x) <= DAILY_MAX_BLOCKS
 
-    # 4. maximum block length (don't cross midnight per day)
-    for c in consultants:
-        # group time slots by day
-        unique_days = set(t.date() for t in time_slots)
-
-        for day in unique_days:
-            # get time slots for this day
-            day_slots = [t for t in time_slots if t.date() == day]
-
-            # apply constraint for each starting time slot in the day
-            for t_idx in range(len(day_slots) - BLOCK_LENGTH_MAXIMUM):
-                t = day_slots[t_idx]
-
-                next_maxlength_time_blocks = [
-                    t + pd.Timedelta(30 * n, "min")
-                    for n in range(BLOCK_LENGTH_MAXIMUM + 1)
-                    if (t + pd.Timedelta(30 * n, "min")).date() == day
-                    # ensure we don't cross midnight
-                ]
-
-                # only add constraint if we have blocks to consider
-                if next_maxlength_time_blocks:
-                    prob += lpSum([x[c, t_] for t_ in next_maxlength_time_blocks]) <= 10
-
-    # TODO: other constraints (give those who requested fewer hours priority?)
-
+    # status = prob.solve(PULP_CBC_CMD(msg=True, gapRel=0.02))
     status = prob.solve()
     return status, x
 
@@ -127,23 +103,25 @@ if __name__ == "__main__":
         setup_consultant_availability_df,
     )
 
-    df = setup_consultant_availability_df(
-        SUNLAB_HOURS, [f"consult{n:02}" for n in range(15)]
-    )
-    # set all times to "not preferable" instead of "unavailable" so demo can be solved
-    df = df.replace(-1, 2)
-    add_consultant_hours_to_df(df, "consult01", 0, "09:00", "11:00", PREF_NEUTRAL)
-    # print(df)
+    mock_consultants = [f"consult{n:02}" for n in range(15)]
+    df = setup_consultant_availability_df(SUNLAB_HOURS, mock_consultants)
+
+    # add mock consultant availability
+    for cn in range(len(mock_consultants)):
+        add_consultant_hours_to_df(
+            df, mock_consultants[cn], cn % 7, "09:00", "00:00", PREF_NEUTRAL
+        )
+        add_consultant_hours_to_df(
+            df, mock_consultants[cn], cn + 1 % 7, "09:00", "14:00", PREF_PREFERABLE
+        )
 
     status, x = create_schedule(df)
 
     print(f"{status=}")
 
+    # print schedule
     if status == 1:
-        consultants = df.columns
-        time_slots = df.index
-
-        for t in time_slots:
-            for c in consultants:
-                if value(x[c, t]) == 1:
-                    print(f"{t:%a %H:%M}: {c} ({_get_availability(df, c, t)})")
+        for t in df.index:
+            for c in df.columns:
+                if (c, t) in x and value(x[c, t]) == 1:
+                    print(f"{t:%a %H:%M}: {c} ({df.loc[t, c]})")
