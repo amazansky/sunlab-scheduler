@@ -1,0 +1,5 @@
+Timestamp,Email Address,"In an ideal world, up to how many hours would you want to work each week?",Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday,Would you like to note any other preferences? (optional)
+2/5/2025 10:30:00,test2@brown.edu,8,"10:30am-1pm, 3pm-8pm",3pm-8pm,"10:30am-1pm, 4pm-6pm",3pm-8pm,2pm-6pm,None,None,Prefer to work on Tuesdays
+2/5/2025 11:00:00,test1@brown.edu,10,"9am-11am,3pm-6pm",10:30am-2pm,"9am-11am,3pm-6pm",10:30am-2pm,"9am-11am,3pm-6pm",none,none,Prefer to work in mornings
+2/5/2025 12:00:00,test3@brown.edu,10,"9am -11am, 1pm-4pm","1-2:30pm, 4p.m.-6p.m.",9am-3pm,NA,1am-5pm,NA,NA,Prefer not to work in mornings
+2/5/2025 18:00:00,test4@brown.edu,8,"3pm-5pm, 6pm-10pm",6pm-10pm ,"3pm-5pm, 6pm-10pm",6pm-10pm ,7pm-10pm ,None ,None ,
