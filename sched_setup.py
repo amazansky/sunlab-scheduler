@@ -14,10 +14,10 @@ SUNLAB_HOURS = {
 }
 
 # TODO: make this into an enum
-# PREF_UNAVAILABLE = -1
-# PREF_PREFERABLE = 0
-# PREF_NEUTRAL = 1
-# PREF_NOT_PREFERABLE = 2
+PREF_UNAVAILABLE = -1
+PREF_PREFERABLE = 0
+PREF_NEUTRAL = 1
+PREF_NOT_PREFERABLE = 2
 
 
 def _get_date_for_day_of_current_week(day_of_week: int) -> date:
@@ -35,26 +35,34 @@ def _get_date_for_day_of_current_week(day_of_week: int) -> date:
     return most_recent_monday + timedelta(days=day_of_week)
 
 
+def _get_range_start_end_datetimes(
+    day_of_week: int, start_time: str, end_time: str
+) -> tuple[datetime, datetime]:
+    day_this_week_date = _get_date_for_day_of_current_week(day_of_week)
+
+    start_datetime, end_datetime = (
+        datetime.combine(
+            day_this_week_date, datetime.strptime(time_str, "%H:%M").time()
+        )
+        for time_str in (start_time, end_time)
+    )
+
+    if end_datetime < start_datetime:
+        # lab closes at midnight - make sure it registers as the next day
+        end_datetime += timedelta(days=1)
+
+    return start_datetime, end_datetime
+
+
 def _generate_time_blocks(hours: dict[int, tuple[str, str]]) -> list[datetime]:
     # make list iteratively by day
     time_blocks = []
 
     for day_of_week, (open_time_str, close_time_str) in hours.items():
-        # gets the date of the `day_of_week` this week, e.g. the date of the Monday this week if
-        # day_of_week == 0
-        day_this_week_date = _get_date_for_day_of_current_week(day_of_week)
-
         # parse lab opening, closing times into datetimes for the current week
-        open_datetime, close_datetime = (
-            datetime.combine(
-                day_this_week_date, datetime.strptime(time_str, "%H:%M").time()
-            )
-            for time_str in (open_time_str, close_time_str)
+        open_datetime, close_datetime = _get_range_start_end_datetimes(
+            day_of_week, open_time_str, close_time_str
         )
-
-        if close_datetime < open_datetime:
-            # lab closes at midnight - make sure it registers as the next day
-            close_datetime += timedelta(days=1)
 
         # get all half-hour blocks between open and close datetimes
         seconds_diff = (close_datetime - open_datetime).total_seconds()
@@ -72,7 +80,31 @@ def setup_consultant_availability_df(
     hours: dict[int, tuple[str, str]], consultants: list[str]
 ) -> pd.DataFrame:
     time_blocks = _generate_time_blocks(hours)
-    return pd.DataFrame(index=time_blocks, columns=consultants)
+    df = pd.DataFrame(index=time_blocks, columns=consultants)
+
+    df_filled = df.fillna(PREF_UNAVAILABLE)  # use -1 (not available) as default value
+    return df_filled
+
+
+def add_consultant_hours_to_df(
+    df: pd.DataFrame,
+    consultant: str,
+    day_of_week: int,
+    start_time: str,
+    end_time: str,
+    pref_level: int,
+) -> pd.DataFrame:
+    start_datetime, end_datetime = _get_range_start_end_datetimes(
+        day_of_week, start_time, end_time
+    )
+
+    # make end time exclusive so that (start_time="09:00", end_time="10:00") only selects 9am and
+    # 9:30am blocks
+    end_datetime -= timedelta(microseconds=1)
+
+    df.loc[start_datetime:end_datetime, consultant] = pref_level  # type: ignore
+
+    return df
 
 
 if __name__ == "__main__":
