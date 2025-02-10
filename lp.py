@@ -26,7 +26,7 @@ PREFERENCE_COSTS = {
 SHIFT_CHANGE_PENALTY = 3
 
 
-def create_schedule(df: pd.DataFrame):
+def create_schedule(df: pd.DataFrame) -> tuple[int, dict]:
     """
     Creates schedule based on consultant availability df generated in sched_setup.py
     """
