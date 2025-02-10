@@ -38,6 +38,10 @@ def _get_date_for_day_of_current_week(day_of_week: int) -> date:
 def _get_range_start_end_datetimes(
     day_of_week: int, start_time: str, end_time: str
 ) -> tuple[datetime, datetime]:
+    """
+    Given start and end times as strings on a given day of the week, generates the
+    corresponding datetimes on the specified day of the current week.
+    """
     day_this_week_date = _get_date_for_day_of_current_week(day_of_week)
 
     start_datetime, end_datetime = (
@@ -55,6 +59,10 @@ def _get_range_start_end_datetimes(
 
 
 def _generate_time_blocks(hours: dict[int, tuple[str, str]]) -> list[datetime]:
+    """
+    Generates a list of datetimes in half-hour increments for each day of the week according to that
+    day's lab opening hours.
+    """
     # make list iteratively by day
     time_blocks = []
 
@@ -79,6 +87,9 @@ def _generate_time_blocks(hours: dict[int, tuple[str, str]]) -> list[datetime]:
 def setup_consultant_availability_df(
     hours: dict[int, tuple[str, str]], consultants: list[str]
 ) -> pd.DataFrame:
+    """
+    Sets up the consultant availability df using the lab's opening hours and a list of consultants.
+    """
     time_blocks = _generate_time_blocks(hours)
     df = pd.DataFrame(index=time_blocks, columns=consultants)
 
@@ -93,7 +104,11 @@ def add_consultant_hours_to_df(
     start_time: str,
     end_time: str,
     pref_level: int,
-) -> pd.DataFrame:
+):
+    """
+    Modifies df inplace to add availability for the specified consultant between the specified
+    start and end times on the given day of the week.
+    """
     start_datetime, end_datetime = _get_range_start_end_datetimes(
         day_of_week, start_time, end_time
     )
@@ -104,12 +119,11 @@ def add_consultant_hours_to_df(
 
     df.loc[start_datetime:end_datetime, consultant] = pref_level  # type: ignore
 
-    return df
-
 
 if __name__ == "__main__":
     # example run
     sched_df = setup_consultant_availability_df(
         SUNLAB_HOURS, ["alice", "bob", "charlie"]
     )
+    add_consultant_hours_to_df(sched_df, "alice", 0, "09:00", "10:00", PREF_PREFERABLE)
     print(sched_df)
