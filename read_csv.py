@@ -10,7 +10,7 @@ from sched_setup import (
 )
 
 
-def convert_to_24h_format(time_str):
+def convert_to_24h_format(time_str: str) -> tuple[str, str] | None:
     """
     Converts time strings like '9am-2pm' to ('09:00', '14:00') format.
     """
@@ -43,7 +43,9 @@ def convert_to_24h_format(time_str):
     return f"{start_hour:02}:{start_minute}", f"{end_hour:02}:{end_minute}"
 
 
-def parse_availability(csv_file, sunlab_hours):
+def parse_availability(
+    csv_file: str, sunlab_hours: dict[int, tuple[str, str]]
+) -> pd.DataFrame | None:
     """
     Parses consultant availability from a CSV file and returns a DataFrame.
     """
@@ -60,7 +62,7 @@ def parse_availability(csv_file, sunlab_hours):
     consultants = df["Email Address"].dropna().unique().tolist()
 
     # initialize availability df
-    availability_df = setup_consultant_availability_df(sunlab_hours, consultants)
+    availability_df = setup_consultant_availability_df(sunlab_hours, consultants)  # type: ignore
 
     # map csv column names to weekdays
     # TODO: do something clever with strptime/strftime here
