@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+
 import pandas as pd
 
 SUNLAB_HOURS = {
@@ -14,10 +15,10 @@ SUNLAB_HOURS = {
 }
 
 # TODO: make this into an enum
-PREF_UNAVAILABLE = -1
-PREF_PREFERABLE = 0
-PREF_NEUTRAL = 1
-PREF_NOT_PREFERABLE = 2
+PREF_UNAVAILABLE = 0
+PREF_NOT_PREFERABLE = 1
+PREF_NEUTRAL = 2
+PREF_PREFERABLE = 3
 
 
 def _get_date_for_day_of_current_week(day_of_week: int) -> date:
