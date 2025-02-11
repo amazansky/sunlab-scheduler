@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pandas as pd
 from pulp import LpProblem, LpVariable, lpSum, value  # type: ignore
 from pulp.constants import LpBinary, LpMinimize  # type: ignore
@@ -26,9 +28,12 @@ PREFERENCE_COSTS = {
 SHIFT_CHANGE_PENALTY = 3
 
 
-def create_schedule(df: pd.DataFrame) -> tuple[int, dict]:
+def create_schedule(
+    df: pd.DataFrame, feasible_blocks: Optional[dict[str, tuple[int, int]]] = None
+) -> tuple[int, dict]:
     """
-    Creates schedule based on consultant availability df generated in sched_setup.py
+    Creates schedule based on consultant availability df generated in sched_setup.py and feasible
+    block allocations generated in read_csv.py
     """
     prob = LpProblem("consultant_scheduling", LpMinimize)
 
@@ -80,10 +85,24 @@ def create_schedule(df: pd.DataFrame) -> tuple[int, dict]:
         prob += lpSum(x[c, t] for c in consultants if (c, t) in x) == 1
 
     # 2. minimum/maximum weekly hours per consultant
+    # print(f"{feasible_blocks=}")
     for c in consultants:
         total_blocks = lpSum(x[c, t] for t in time_slots if (c, t) in x)
-        prob += total_blocks >= CONSULTANT_MIN_HOURS * 2  # convert hours to blocks
-        prob += total_blocks <= CONSULTANT_MAX_HOURS * 2  # convert hours to blocks
+
+        if feasible_blocks is None:
+            # specific hours not specified: just use generic 2-10 range
+            prob += total_blocks >= CONSULTANT_MIN_HOURS * 2  # convert hours to blocks
+            prob += total_blocks <= CONSULTANT_MAX_HOURS * 2  # convert hours to blocks
+
+        else:
+            # specific hours were specified in the dict - use 80-100% of the # of blocks requested
+            # (already know the hours request is bounded by 2-10 range from the allocate function)
+            consultant_blocks_min, consultant_blocks_max = feasible_blocks[c]
+
+            print(f"{c=}, {consultant_blocks_max=}, {consultant_blocks_min=}")
+
+            prob += total_blocks >= consultant_blocks_min
+            prob += total_blocks <= consultant_blocks_max
 
     # 3. maximum 5 hours (10 blocks) per day per consultant
     for c in consultants:

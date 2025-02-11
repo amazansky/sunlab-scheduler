@@ -1,7 +1,9 @@
 import re
+from math import ceil
 
 import pandas as pd
 
+from lp import CONSULTANT_MAX_HOURS, CONSULTANT_MIN_HOURS
 from sched_setup import (
     PREF_NEUTRAL,
     SUNLAB_HOURS,
@@ -9,8 +11,10 @@ from sched_setup import (
     setup_consultant_availability_df,
 )
 
+TOT_WEEKLY_SUNLAB_HOURS = 95
 
-def convert_to_24h_format(time_str: str) -> tuple[str, str] | None:
+
+def _convert_to_24h_format(time_str: str) -> tuple[str, str] | None:
     """
     Converts time strings like '9am-2pm' to ('09:00', '14:00') format.
     """
@@ -41,6 +45,76 @@ def convert_to_24h_format(time_str: str) -> tuple[str, str] | None:
         end_hour = 0
 
     return f"{start_hour:02}:{start_minute}", f"{end_hour:02}:{end_minute}"
+
+
+def _hours_to_blocks(hours: int):
+    # TODO: use this more
+    return hours * 2
+
+
+def allocate_feasible_blocks(
+    csv_file: str, total_hours: int = TOT_WEEKLY_SUNLAB_HOURS
+) -> dict[str, tuple[int, int]]:
+    """
+    Allocates feasible blocks to consultants based on their requested hours.
+
+    If a consultant has requested fewer than the possible number of weekly hours per consultant,
+    they get their request. Any consultants who have requested more than what is possible get the
+    average of however many hours remain.
+
+    Returns dict in form {"consultant_email@brown.edu": (min_blocks), (max_blocks)}
+    (note: 2 blocks per hour)
+    """
+    df = pd.read_csv(csv_file)
+
+    # TODO: don't hardcode column indices - maybe rename columns or set standard?
+    requested_blocks = df.iloc[:, 1:3].dropna()
+    # convert hours to blocks
+    requested_blocks.iloc[:, 1] = requested_blocks.iloc[:, 1].astype(int) * 2
+
+    allocation = {}
+    remaining_blocks = _hours_to_blocks(total_hours)
+    remaining_consultants = len(requested_blocks)
+
+    while remaining_consultants > 0:
+        avg_blocks = remaining_blocks / remaining_consultants
+        reassess = []
+
+        for _, (email, blocks) in requested_blocks.iterrows():
+            if (blocks < _hours_to_blocks(CONSULTANT_MIN_HOURS)) or (
+                blocks > _hours_to_blocks(CONSULTANT_MAX_HOURS)
+            ):
+                raise RuntimeError(
+                    f"consultant {email} requested illegal number of hours: {blocks / 2} "
+                    + f"(min: {CONSULTANT_MIN_HOURS}, max: {CONSULTANT_MAX_HOURS})"
+                )
+
+            if blocks < avg_blocks:
+                # make sure they get exactly their request if they requested less than average
+                allocation[email] = (blocks, blocks)
+                remaining_blocks -= blocks
+                remaining_consultants -= 1
+            else:
+                reassess.append((email, blocks))
+
+        if len(reassess) == remaining_consultants:
+            break
+
+    if len(reassess) == 0:
+        # TODO: remove this later if i want to add flexibility to leave some hours empty
+        raise RuntimeError("Warning: Unallocated hours remaining.")
+
+    # need to allocate blocks to everyone who requested over average
+    avg_blocks = remaining_blocks / remaining_consultants
+    max_default_allocation = ceil(1.05 * avg_blocks)
+    min_default_allocation = ceil(0.8 * avg_blocks)
+
+    for email, _ in reassess:
+        allocation[email] = (min_default_allocation, max_default_allocation)
+
+    print(f"{allocation=}")
+
+    return allocation
 
 
 def parse_availability(csv_file: str) -> pd.DataFrame:
@@ -90,7 +164,7 @@ def parse_availability(csv_file: str) -> pd.DataFrame:
 
             for slot in raw_times.split(","):
                 slot = slot.strip()
-                parsed_time = convert_to_24h_format(slot)
+                parsed_time = _convert_to_24h_format(slot)
 
                 if parsed_time:  # parse succeeded
                     start_time, end_time = parsed_time

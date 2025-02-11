@@ -9,7 +9,7 @@ from lp import (
     PREF_UNAVAILABLE,
     create_schedule,
 )
-from read_csv import parse_availability
+from read_csv import allocate_feasible_blocks, parse_availability
 
 
 def _print_consultant_requests(csv_file: str):
@@ -32,6 +32,10 @@ def run(csv_file: str) -> dict:
     print("\n=== PARSING AVAILABILITY ===")
     df_avail = parse_availability(csv_file)
     print(df_avail)
+
+    # get possible number of hours to assign to each consultant in preparation for LP
+    # TODO: refactor this to a different place probably
+    feasible_hours = allocate_feasible_blocks(csv_file)
 
     # output to file to give the user a chance to change preference levels as per consultant
     # requests. (really should come up with a better way of doing this)
@@ -59,7 +63,7 @@ def run(csv_file: str) -> dict:
     print(df_avail)
 
     print("\n=== CREATING SCHEDULE ===")
-    status, x = create_schedule(df_avail)
+    status, x = create_schedule(df_avail, feasible_hours)
 
     if status == LpStatusOptimal:
         print("\n=== SCHEDULE CREATED SUCCESSFULLY ===")
