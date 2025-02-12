@@ -106,13 +106,22 @@ def allocate_feasible_blocks(
 
     # need to allocate blocks to everyone who requested over average
     avg_blocks = remaining_blocks / remaining_consultants
+
     max_default_allocation = ceil(1.05 * avg_blocks)
-    min_default_allocation = ceil(0.8 * avg_blocks)
+
+    # TODO: add some sort of validation to make sure this doesn't leave the people who requested
+    # more hours with less than the ones who requested fewer
+    min_default_allocation = ceil(0.85 * avg_blocks)
 
     for email, _ in reassess:
         allocation[email] = (min_default_allocation, max_default_allocation)
 
-    print(f"{allocation=}")
+    print("HOURS ALLOCATION:")
+    alloc_str = [
+        f"{email}: {min/2:.1f}-{max/2:.1f} hrs ({min}-{max} blocks)"
+        for email, (min, max) in allocation.items()
+    ]
+    print("\n".join(alloc_str))
 
     return allocation
 
@@ -195,7 +204,11 @@ def parse_availability(csv_file: str) -> pd.DataFrame:
 
 if __name__ == "__main__":
     # example usage
-    csv_file_path = "example/availability.csv"
+    csv_file_path = "Consultant weekly shift scheduling Spring 2025 (Responses) - Form Responses 1(2).csv"
 
-    availability_df = parse_availability(csv_file_path)
-    print(availability_df)
+    # availability_df = parse_availability(csv_file_path)
+    # print(availability_df)
+
+    from pprint import pprint
+
+    pprint(allocate_feasible_blocks(csv_file_path))

@@ -20,12 +20,12 @@ DAILY_MAX_BLOCKS = 10  # 5 hr = 10 blocks
 # TODO: refactor this into preference enum?
 PREFERENCE_COSTS = {
     PREF_PREFERABLE: 0,
-    PREF_NEUTRAL: 1,
-    PREF_NOT_PREFERABLE: 4,
+    PREF_NEUTRAL: 5,
+    PREF_NOT_PREFERABLE: 10,
     PREF_UNAVAILABLE: 100,
 }
 
-SHIFT_CHANGE_PENALTY = 6
+SHIFT_CHANGE_PENALTY = 7
 
 
 def create_schedule(
