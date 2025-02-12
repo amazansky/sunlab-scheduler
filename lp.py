@@ -25,7 +25,7 @@ PREFERENCE_COSTS = {
     PREF_UNAVAILABLE: 100,
 }
 
-SHIFT_CHANGE_PENALTY = 3
+SHIFT_CHANGE_PENALTY = 6
 
 
 def create_schedule(
@@ -67,13 +67,14 @@ def create_schedule(
     )
 
     # constraints
-    # 0. penalize shift changes
+    # 0. penalize shift changes within same day
     for c in consultants:
-        for i in range(len(time_slots) - 1):
-            t, t_next = time_slots[i], time_slots[i + 1]
-            if (c, t) in x and (c, t_next) in x:
-                prob += y[c, t] >= x[c, t] - x[c, t_next]
-                prob += y[c, t] >= x[c, t_next] - x[c, t]
+        for _, slots in day_slots.items():  # slots within each day
+            for i in range(len(slots) - 1):
+                t, t_next = slots[i], slots[i + 1]
+                if (c, t) in x and (c, t_next) in x:
+                    prob += y[c, t] >= x[c, t] - x[c, t_next]
+                    prob += y[c, t] >= x[c, t_next] - x[c, t]
 
     shift_changes = lpSum(y.values())
 
