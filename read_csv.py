@@ -16,10 +16,10 @@ TOT_WEEKLY_SUNLAB_HOURS = 95
 
 def _convert_to_24h_format(time_str: str) -> tuple[str, str] | None:
     """
-    Converts time strings like '9am-2pm' to ('09:00', '14:00') format.
+    Converts time strings like "9am-2pm" to ("09:00", "14:00") format.
     """
     match = re.match(
-        r"(\d{1,2})(?::(\d{2}))?([ap]m?)? ?- ?(\d{1,2})(?::(\d{2}))?([ap]m)?",
+        r"(\d{1,2})(?::(\d{2}))?([ap]m?)? ?- ?(\d{1,2})(?::(\d{2}))?([ap]m?)?",
         time_str.strip().lower(),
     )
     if not match:
@@ -33,18 +33,35 @@ def _convert_to_24h_format(time_str: str) -> tuple[str, str] | None:
     start_minute = start_minute if start_minute else "00"
     end_hour = int(end_hour)
     end_minute = end_minute if end_minute else "00"
+    # normalize "am" and "pm" to "a" and "p"
+    start_period = start_period[0] if start_period else ""
 
-    if start_period == "pm" and start_hour != 12:
+    try:
+        end_period = end_period[0]  # end period should be there no matter what
+    except TypeError as e:
+        raise TypeError(
+            f"{time_str=} {start_hour=} {start_minute=} {start_period=} {end_hour=} {end_minute=} {end_period=}"
+        ) from e
+
+    # handle "3-5pm" as 3pm-5pm instead of 3am-5pm
+    if (not start_period) and end_period == "p":
+        start_period = "p"
+
+    if start_period == "p" and start_hour != 12:
         start_hour += 12
-    elif start_period == "am" and start_hour == 12:
+    elif start_period == "a" and start_hour == 12:
         start_hour = 0
 
-    if end_period == "pm" and end_hour != 12:
+    if end_period == "p" and end_hour != 12:
         end_hour += 12
-    elif end_period == "am" and end_hour == 12:
+    elif end_period == "a" and end_hour == 12:
         end_hour = 0
 
-    return f"{start_hour:02}:{start_minute}", f"{end_hour:02}:{end_minute}"
+    tup = f"{start_hour:02}:{start_minute}", f"{end_hour:02}:{end_minute}"
+
+    print(f"{time_str} -> {tup}")
+
+    return tup
 
 
 def _hours_to_blocks(hours: int):
@@ -118,7 +135,7 @@ def allocate_feasible_blocks(
 
     print("HOURS ALLOCATION:")
     alloc_str = [
-        f"{email}: {min/2:.1f}-{max/2:.1f} hrs ({min}-{max} blocks)"
+        f"{email}: {min / 2:.1f}-{max / 2:.1f} hrs ({min}-{max} blocks)"
         for email, (min, max) in allocation.items()
     ]
     print("\n".join(alloc_str))
@@ -166,8 +183,8 @@ def parse_availability(csv_file: str) -> pd.DataFrame:
 
             if (
                 pd.isna(raw_times)
-                or raw_times.lower() == "none"
-                or raw_times.lower() == "na"
+                or raw_times.strip().lower() == "none"
+                or raw_times.strip().lower() == "na"
             ):
                 continue
 
@@ -206,9 +223,8 @@ if __name__ == "__main__":
     # example usage
     csv_file_path = "Consultant weekly shift scheduling Spring 2025 (Responses) - Form Responses 1(2).csv"
 
-    # availability_df = parse_availability(csv_file_path)
-    # print(availability_df)
+    availability_df = parse_availability(csv_file_path)
+    print(availability_df)
 
-    from pprint import pprint
-
-    pprint(allocate_feasible_blocks(csv_file_path))
+    # from pprint import pprint
+    # pprint(allocate_feasible_blocks(csv_file_path))
