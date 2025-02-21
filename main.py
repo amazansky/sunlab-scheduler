@@ -1,5 +1,4 @@
 import pandas as pd
-from pulp import value  # type: ignore
 from pulp.constants import LpStatus, LpStatusOptimal  # type: ignore
 
 from lp import (
@@ -10,6 +9,7 @@ from lp import (
     create_schedule,
 )
 from read_csv import allocate_feasible_blocks, parse_availability
+from sched_format import ScheduleFormatter
 
 
 def _print_consultant_requests(csv_file: str):
@@ -67,22 +67,16 @@ def run(csv_file: str) -> dict:
 
     if status == LpStatusOptimal:
         print("\n=== SCHEDULE CREATED SUCCESSFULLY ===")
-        print_formatted_schedule(x, df_avail)
+        sched_formatter = ScheduleFormatter(x, df_avail)
+        print("=====")
+        sched_formatter.print_schedule_by_day()
+        print("=====")
+        sched_formatter.print_schedule_by_consultant()
     else:
         print("\n=== COULD NOT CREATE SCHEDULE ===")
         print(f"Linear Program Status: {LpStatus[status]}")
 
     return x
-
-
-def print_formatted_schedule(x: dict, df: pd.DataFrame):
-    # print schedule
-    for t in df.index:
-        for c in df.columns:
-            if (c, t) in x and value(x[c, t]) == 1:
-                print(f"{t:%a %H:%M}: {c} ({df.loc[t, c]})")
-                # TODO: print preference level as a string instead of name
-                # TODO: also print how many other ppl are available during each block
 
 
 if __name__ == "__main__":
